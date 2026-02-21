@@ -127,12 +127,6 @@ function toErrorMessage(err: unknown): string {
   return "Image conversion failed. Please try a different photo or format (e.g. JPEG).";
 }
 
-/** Whether the error is the known "format not supported" from older heic2any/libheif (e.g. iOS 18 HEIC). */
-function isUnsupportedHeicFormatError(err: unknown): boolean {
-  const msg = toErrorMessage(err).toLowerCase();
-  return msg.includes("err_libheif") || msg.includes("format not supported") || msg.includes("invalid_input");
-}
-
 /** Convert a File to a data URL for sessionStorage. HEIF/HEIC files are converted to JPEG so they can be displayed in the browser. */
 export async function fileToDataUrl(file: File): Promise<string> {
   // Browsers cannot display HEIF/HEIC (e.g. iPhone photos). Convert to JPEG for display and storage.
@@ -148,16 +142,6 @@ export async function fileToDataUrl(file: File): Promise<string> {
       return blobToDataUrl(blob);
     } catch (err) {
       lastErr = err;
-      // If it's the "format not supported" error (e.g. iOS 18 HEIC), try heic-to which uses newer libheif.
-      if (isUnsupportedHeicFormatError(err)) {
-        try {
-          const { heicTo } = await import("heic-to");
-          const blob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.9 });
-          return blobToDataUrl(blob);
-        } catch (fallbackErr) {
-          lastErr = fallbackErr;
-        }
-      }
     }
 
     // Both converters failed; throw a user-friendly message.

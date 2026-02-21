@@ -3,13 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "heic-to": "^1.4.2",
     "heic2any": "^0.0.4",
     "next": "16.1.6",
     "openai": "^6.21.0",
