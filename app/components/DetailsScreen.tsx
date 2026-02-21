@@ -10,16 +10,13 @@ import {
   setStoredPhotos,
   setStoredPrice,
   setStoredNotes,
-  setStoredAnalysis,
 } from "../lib/capture";
-import { resizeDataUrlForAnalysis } from "../lib/resizeForAnalysis";
 
 export default function DetailsScreen() {
   const router = useRouter();
   const [photos, setPhotos] = useState<string[]>([]);
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,52 +50,15 @@ export default function DetailsScreen() {
 
   const addPhoto = () => fileInputRef.current?.click();
 
-  const handleAnalyze = useCallback(async () => {
+  const handleAnalyze = useCallback(() => {
     if (photos.length === 0) return;
-    
-    setIsAnalyzing(true);
-    
-    // Persist price and notes to sessionStorage
+
+    // Persist price and notes so the analyzing screen can call the API
     setStoredPrice(price);
     setStoredNotes(notes);
-    
-    try {
-      // Resize photos for analysis to reduce payload and API cost (keeps full-res in UI)
-      const photosToSend = await Promise.all(
-        photos.map((url) => resizeDataUrlForAnalysis(url))
-      );
-      const response = await fetch("/api/analyze-item", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photos: photosToSend,
-          price,
-          notes,
-        }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: "Failed to analyze" }));
-        console.error("Analysis error:", error);
-        // Fall back to mock data if API fails
-        router.push("/analyzing");
-        return;
-      }
-      
-      const analysis = await response.json();
-      
-      // Store analysis result
-      setStoredAnalysis(analysis);
-      
-      // Navigate to analyzing screen (which will use the stored analysis)
-      router.push("/analyzing");
-    } catch (err) {
-      console.error("Failed to call analyze API:", err);
-      // Fall back to analyzing screen with mock data
-      router.push("/analyzing");
-    } finally {
-      setIsAnalyzing(false);
-    }
+
+    // Go to analyzing screen immediately; API runs there so waiting feels like progress
+    router.push("/analyzing");
   }, [router, photos, price, notes]);
 
   const hasValidPrice =
@@ -263,31 +223,19 @@ export default function DetailsScreen() {
           <button
             type="button"
             onClick={handleAnalyze}
-            disabled={!canAnalyze || isAnalyzing}
+            disabled={!canAnalyze}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-stone-800 py-3 text-sm font-semibold text-white shadow-sm hover:bg-stone-900 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500"
           >
-            {isAnalyzing ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Analyzing...
-              </>
-            ) : (
-              <>
-                Analyze Item
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-              </>
-            )}
+            Analyze Item
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
           </button>
           {!canAnalyze && (
             <p className="mt-2 text-center text-xs text-stone-500">

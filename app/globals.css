@@ -48,6 +48,20 @@ body {
   }
 }
 
+@keyframes analyzing-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.analyzing-progress-fill {
+  width: 0;
+  min-width: 0;
+}
+
 @keyframes scan-bar {
   0% {
     transform: translateY(-100%);
@@ -138,7 +152,7 @@ body {
 }
 
 .scan-bar-container {
-  animation: scan-bar 2s ease-in-out infinite;
+  animation: scan-bar 2.5s ease-in-out infinite;
 }
 
 .recommendation-reveal {

@@ -127,10 +127,6 @@ export default function GlobalQuestionsSection({
         <p className="mt-2 font-title-serif text-xl font-bold text-stone-900">
           What to Look For
         </p>
-        {/* Instructional subtitle — smaller, regular weight, grey */}
-        <p className="mt-1 text-sm font-normal text-stone-500">
-          Tap a question to answer and improve your recommendation.
-        </p>
         {/* Question cards — expand inline to show answer form (no modal) */}
         <div className="mt-5 space-y-3">
           {visibleQuestions.map((q) => {

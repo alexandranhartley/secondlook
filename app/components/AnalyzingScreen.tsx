@@ -1,8 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { getStoredPhotos, getStoredAnalysis } from "../lib/capture";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getStoredPhotos,
+  getStoredPrice,
+  getStoredNotes,
+  getStoredAnalysis,
+  setStoredAnalysis,
+} from "../lib/capture";
+import { resizeDataUrlForAnalysis } from "../lib/resizeForAnalysis";
 import {
   getColorValue,
   getRecommendationColor,
@@ -14,12 +21,14 @@ const TEXT_SEQUENCE = [
   "Analyzing your find...",
   "Evaluating materials...",
   "Evaluating condition...",
+  "Preparing your verdict…",
 ] as const;
 
 const PULSE_DURATION = 2000; // 2 seconds per cycle
-const ANALYSIS_DURATION = 5000; // 5 seconds total
-const REVEAL_DURATION = 2000; // 2 seconds to show recommendation
+const ANALYSIS_DURATION = 8000; // 8 seconds total — feels more deliberate
+const REVEAL_DURATION = 2500; // 2.5 seconds to show recommendation
 const SPARK_DURATION = 1500; // 1.5 seconds for spark
+const COLOR_PHASE_DURATION = 4000; // Stay in warm yellow for 4s, then switch to final
 
 export default function AnalyzingScreen() {
   const router = useRouter();
@@ -30,34 +39,81 @@ export default function AnalyzingScreen() {
   const [colorPhase, setColorPhase] = useState<"yellow" | "final">("yellow");
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [recommendationHeadline, setRecommendationHeadline] = useState("");
-  const [glowIntensity, setGlowIntensity] = useState(0.7); // For pulsing effect - start visible
+  const [glowIntensity, setGlowIntensity] = useState(0.65); // Softer pulse range 0.5–0.8
   const timersRef = useRef<NodeJS.Timeout[]>([]);
   const borderGlowRef = useRef<HTMLDivElement>(null);
+  const hasRevealTimeElapsedRef = useRef(false);
+  const analysisReadyRef = useRef(false);
+  const setRecommendationFromAnalysisRef = useRef<((headline: string, color: RecommendationColor) => void) | null>(null);
 
-  // Load analysis result on mount
+  // Apply analysis result and reveal if the 8s has already elapsed
+  const applyAnalysisAndMaybeReveal = useCallback(
+    (headline: string, color: RecommendationColor) => {
+      setBorderColor(color);
+      setRecommendationHeadline(headline);
+      analysisReadyRef.current = true;
+      if (hasRevealTimeElapsedRef.current) {
+        setShowRecommendation(true);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    setRecommendationFromAnalysisRef.current = applyAnalysisAndMaybeReveal;
+  }, [applyAnalysisAndMaybeReveal]);
+
+  // Load photos and either use stored analysis or run the API
   useEffect(() => {
     const storedPhotos = getStoredPhotos();
     if (storedPhotos.length === 0) {
-      // Redirect after a brief delay to show something
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
+      setTimeout(() => router.push("/"), 1000);
       return;
     }
     setPhotos(storedPhotos);
 
-    // Get stored analysis from API call
-    const analysis = getStoredAnalysis();
-    if (analysis && analysis.recommendation) {
-      const color = getRecommendationColor(analysis.recommendation.headline);
+    const existing = getStoredAnalysis();
+    if (existing && existing.recommendation) {
+      const color = getRecommendationColor(existing.recommendation.headline);
       setBorderColor(color);
-      setRecommendationHeadline(analysis.recommendation.headline);
-    } else {
-      // Fallback: redirect to home if no analysis found
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
+      setRecommendationHeadline(existing.recommendation.headline);
+      analysisReadyRef.current = true;
+      return;
     }
+
+    // No analysis yet: run the API here so the user waits on this screen
+    (async () => {
+      try {
+        const price = getStoredPrice();
+        const notes = getStoredNotes();
+        const photosToSend = await Promise.all(
+          storedPhotos.map((url) => resizeDataUrlForAnalysis(url))
+        );
+        const response = await fetch("/api/analyze-item", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photos: photosToSend, price, notes }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: "Failed" }));
+          console.error("Analysis error:", err);
+          setTimeout(() => router.push("/"), 2000);
+          return;
+        }
+        const analysis = await response.json();
+        setStoredAnalysis(analysis);
+        const headline = analysis?.recommendation?.headline;
+        if (headline) {
+          const color = getRecommendationColor(headline);
+          setRecommendationFromAnalysisRef.current?.(headline, color);
+        } else {
+          setTimeout(() => router.push("/"), 2000);
+        }
+      } catch (err) {
+        console.error("Analyze API error:", err);
+        setTimeout(() => router.push("/"), 2000);
+      }
+    })();
   }, [router]);
 
   // Photo cycling
@@ -89,7 +145,7 @@ export default function AnalyzingScreen() {
     return () => clearInterval(textInterval);
   }, [photos.length]);
 
-  // Color transition and haptic
+  // Color transition and haptic — stay in warm yellow longer, then switch to final
   useEffect(() => {
     if (photos.length === 0) return;
 
@@ -99,18 +155,21 @@ export default function AnalyzingScreen() {
       if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate([100, 50, 100]);
       }
-    }, 2000);
+    }, COLOR_PHASE_DURATION);
 
     timersRef.current.push(colorTimer);
     return () => clearTimeout(colorTimer);
   }, [photos.length]);
 
-  // Recommendation reveal
+  // Recommendation reveal — after ANALYSIS_DURATION, show result when we have it
   useEffect(() => {
     if (photos.length === 0) return;
 
     const revealTimer = setTimeout(() => {
-      setShowRecommendation(true);
+      hasRevealTimeElapsedRef.current = true;
+      if (analysisReadyRef.current) {
+        setShowRecommendation(true);
+      }
     }, ANALYSIS_DURATION);
 
     timersRef.current.push(revealTimer);
@@ -141,9 +200,8 @@ export default function AnalyzingScreen() {
       const elapsed = timestamp - startTime;
       const progress = (elapsed % duration) / duration;
       
-      // Smooth sine wave for natural breathing effect
-      // Very wide range (0.4 to 1.0) for highly visible pulsing
-      const intensity = 0.4 + (0.6 * (Math.sin(progress * Math.PI * 2) + 1) / 2);
+      // Smooth sine wave — narrower range (0.5 to 0.8) for gentler breathing
+      const intensity = 0.5 + (0.3 * (Math.sin(progress * Math.PI * 2) + 1) / 2);
       setGlowIntensity(intensity);
       
       requestAnimationFrame(animate);
@@ -154,46 +212,44 @@ export default function AnalyzingScreen() {
     return () => cancelAnimationFrame(animationId);
   }, [showRecommendation, photos.length]);
 
-  // Update border glow via ref - this ensures it's set immediately
+  // Update border glow via ref — softer alphas and smaller spread
   useEffect(() => {
     if (!borderGlowRef.current || photos.length === 0) return;
-    // Sync with inline styles - using inset shadows
     const isYellow = colorPhase === "yellow";
     const colorValue = isYellow ? getYellowColor() : getColorValue(borderColor);
-    const baseAlpha = isYellow ? 1.2 : 0.5; // Higher for yellow
+    const baseAlpha = isYellow ? 0.6 : 0.5; // Softer glow, no 1.2
     const pulseMultiplier = glowIntensity;
-    const innerAlpha = Math.min(1.0, baseAlpha * pulseMultiplier * 0.9);
-    const middleAlpha = Math.min(0.9, baseAlpha * pulseMultiplier * 0.7);
-    const outerAlpha = Math.min(0.7, baseAlpha * pulseMultiplier * 0.4);
-    
+    const innerAlpha = Math.min(0.65, baseAlpha * pulseMultiplier * 0.9);
+    const middleAlpha = Math.min(0.5, baseAlpha * pulseMultiplier * 0.7);
+    const outerAlpha = Math.min(0.35, baseAlpha * pulseMultiplier * 0.4);
+
     borderGlowRef.current.style.boxShadow = `
-      inset 0 0 80px 35px rgba(${colorValue.rgb}, ${innerAlpha}),
-      inset 0 0 120px 60px rgba(${colorValue.rgb}, ${middleAlpha}),
-      inset 0 0 160px 85px rgba(${colorValue.rgb}, ${outerAlpha})
+      inset 0 0 60px 25px rgba(${colorValue.rgb}, ${innerAlpha}),
+      inset 0 0 100px 45px rgba(${colorValue.rgb}, ${middleAlpha}),
+      inset 0 0 140px 65px rgba(${colorValue.rgb}, ${outerAlpha})
     `;
   }, [colorPhase, borderColor, glowIntensity, photos.length]);
-  
-  // Force initial yellow glow on mount - runs immediately after photos are set
+
+  // Force initial yellow glow on mount
   useEffect(() => {
     if (photos.length === 0) return;
-    // Small delay to ensure ref is ready
     const timer = setTimeout(() => {
       if (borderGlowRef.current && colorPhase === "yellow") {
         const yellowColor = getYellowColor();
-        const baseAlpha = 1.2;
+        const baseAlpha = 0.6;
         const pulseMultiplier = glowIntensity;
-        const innerAlpha = Math.min(1.0, baseAlpha * pulseMultiplier * 0.9);
-        const middleAlpha = Math.min(0.9, baseAlpha * pulseMultiplier * 0.7);
-        const outerAlpha = Math.min(0.7, baseAlpha * pulseMultiplier * 0.4);
-        
+        const innerAlpha = Math.min(0.65, baseAlpha * pulseMultiplier * 0.9);
+        const middleAlpha = Math.min(0.5, baseAlpha * pulseMultiplier * 0.7);
+        const outerAlpha = Math.min(0.35, baseAlpha * pulseMultiplier * 0.4);
+
         borderGlowRef.current.style.boxShadow = `
-          inset 0 0 80px 35px rgba(${yellowColor.rgb}, ${innerAlpha}),
-          inset 0 0 120px 60px rgba(${yellowColor.rgb}, ${middleAlpha}),
-          inset 0 0 160px 85px rgba(${yellowColor.rgb}, ${outerAlpha})
+          inset 0 0 60px 25px rgba(${yellowColor.rgb}, ${innerAlpha}),
+          inset 0 0 100px 45px rgba(${yellowColor.rgb}, ${middleAlpha}),
+          inset 0 0 140px 65px rgba(${yellowColor.rgb}, ${outerAlpha})
         `;
       }
     }, 10);
-    
+
     return () => clearTimeout(timer);
   }, [photos.length, colorPhase, glowIntensity]);
 
@@ -221,22 +277,17 @@ export default function AnalyzingScreen() {
   const colorValue = isYellow ? getYellowColor() : getColorValue(borderColor);
   const finalColorValue = getColorValue(borderColor);
 
-  // Calculate glow DIRECTLY in render - ensures yellow is visible immediately
-  // Using inset shadows - these create an edge-only glow effect
-  // Much higher opacity for yellow to ensure visibility
-  const baseAlpha = isYellow ? 1.2 : 0.5; // Exceed 1.0 for maximum intensity
+  // Softer glow in render — lower alpha, smaller spread
+  const baseAlpha = isYellow ? 0.6 : 0.5;
   const pulseMultiplier = glowIntensity;
-  // Clamp values to ensure they're visible but not exceed reasonable bounds
-  const innerAlpha = Math.min(1.0, baseAlpha * pulseMultiplier * 0.9);
-  const middleAlpha = Math.min(0.9, baseAlpha * pulseMultiplier * 0.7);
-  const outerAlpha = Math.min(0.7, baseAlpha * pulseMultiplier * 0.4);
-  
-  // Inset shadows create edge glow - multiple layers for softness
-  // Increased blur and spread for more visible glow
+  const innerAlpha = Math.min(0.65, baseAlpha * pulseMultiplier * 0.9);
+  const middleAlpha = Math.min(0.5, baseAlpha * pulseMultiplier * 0.7);
+  const outerAlpha = Math.min(0.35, baseAlpha * pulseMultiplier * 0.4);
+
   const currentGlowShadow = `
-    inset 0 0 80px 35px rgba(${colorValue.rgb}, ${innerAlpha}),
-    inset 0 0 120px 60px rgba(${colorValue.rgb}, ${middleAlpha}),
-    inset 0 0 160px 85px rgba(${colorValue.rgb}, ${outerAlpha})
+    inset 0 0 60px 25px rgba(${colorValue.rgb}, ${innerAlpha}),
+    inset 0 0 100px 45px rgba(${colorValue.rgb}, ${middleAlpha}),
+    inset 0 0 140px 65px rgba(${colorValue.rgb}, ${outerAlpha})
   `;
 
   return (
@@ -254,66 +305,50 @@ export default function AnalyzingScreen() {
         aria-hidden="true"
       />
       
-      {/* Edge glow overlays - visible gradient divs that pulse with intensity */}
+      {/* Edge glow overlays — softened so they don’t feel intense */}
       {!showRecommendation && (
         <>
-          {/* Top edge - pulses with glowIntensity */}
           <div
             className="fixed left-0 right-0 top-0 pointer-events-none"
             style={{
-              height: '70px',
-              background: `linear-gradient(to bottom, 
-                rgba(${colorValue.rgb}, ${Math.min(0.5, innerAlpha * 0.6)}), 
-                rgba(${colorValue.rgb}, ${Math.min(0.25, middleAlpha * 0.35)}), 
-                transparent)`,
-              opacity: isYellow ? glowIntensity * 0.7 : 0.2,
+              height: "56px",
+              background: `linear-gradient(to bottom, rgba(${colorValue.rgb}, ${Math.min(0.2, innerAlpha * 0.35)}), rgba(${colorValue.rgb}, ${Math.min(0.12, middleAlpha * 0.2)}), transparent)`,
+              opacity: isYellow ? glowIntensity * 0.35 : 0.1,
               zIndex: 2,
-              transition: 'opacity 0.1s ease-out',
+              transition: "opacity 0.15s ease-out",
             }}
             aria-hidden="true"
           />
-          {/* Bottom edge */}
           <div
             className="fixed left-0 right-0 bottom-0 pointer-events-none"
             style={{
-              height: '70px',
-              background: `linear-gradient(to top, 
-                rgba(${colorValue.rgb}, ${Math.min(0.5, innerAlpha * 0.6)}), 
-                rgba(${colorValue.rgb}, ${Math.min(0.25, middleAlpha * 0.35)}), 
-                transparent)`,
-              opacity: isYellow ? glowIntensity * 0.7 : 0.2,
+              height: "56px",
+              background: `linear-gradient(to top, rgba(${colorValue.rgb}, ${Math.min(0.2, innerAlpha * 0.35)}), rgba(${colorValue.rgb}, ${Math.min(0.12, middleAlpha * 0.2)}), transparent)`,
+              opacity: isYellow ? glowIntensity * 0.35 : 0.1,
               zIndex: 2,
-              transition: 'opacity 0.1s ease-out',
+              transition: "opacity 0.15s ease-out",
             }}
             aria-hidden="true"
           />
-          {/* Left edge */}
           <div
             className="fixed left-0 top-0 bottom-0 pointer-events-none"
             style={{
-              width: '70px',
-              background: `linear-gradient(to right, 
-                rgba(${colorValue.rgb}, ${Math.min(0.5, innerAlpha * 0.6)}), 
-                rgba(${colorValue.rgb}, ${Math.min(0.25, middleAlpha * 0.35)}), 
-                transparent)`,
-              opacity: isYellow ? glowIntensity * 0.7 : 0.2,
+              width: "56px",
+              background: `linear-gradient(to right, rgba(${colorValue.rgb}, ${Math.min(0.2, innerAlpha * 0.35)}), rgba(${colorValue.rgb}, ${Math.min(0.12, middleAlpha * 0.2)}), transparent)`,
+              opacity: isYellow ? glowIntensity * 0.35 : 0.1,
               zIndex: 2,
-              transition: 'opacity 0.1s ease-out',
+              transition: "opacity 0.15s ease-out",
             }}
             aria-hidden="true"
           />
-          {/* Right edge */}
           <div
             className="fixed right-0 top-0 bottom-0 pointer-events-none"
             style={{
-              width: '70px',
-              background: `linear-gradient(to left, 
-                rgba(${colorValue.rgb}, ${Math.min(0.5, innerAlpha * 0.6)}), 
-                rgba(${colorValue.rgb}, ${Math.min(0.25, middleAlpha * 0.35)}), 
-                transparent)`,
-              opacity: isYellow ? glowIntensity * 0.7 : 0.2,
+              width: "56px",
+              background: `linear-gradient(to left, rgba(${colorValue.rgb}, ${Math.min(0.2, innerAlpha * 0.35)}), rgba(${colorValue.rgb}, ${Math.min(0.12, middleAlpha * 0.2)}), transparent)`,
+              opacity: isYellow ? glowIntensity * 0.35 : 0.1,
               zIndex: 2,
-              transition: 'opacity 0.1s ease-out',
+              transition: "opacity 0.15s ease-out",
             }}
             aria-hidden="true"
           />
@@ -364,6 +399,22 @@ export default function AnalyzingScreen() {
             <p className="text-center text-lg font-medium text-stone-700">
               {currentText}
             </p>
+            {/* Progress bar — fills over ANALYSIS_DURATION so user sees progress */}
+            <div
+              className="mt-4 w-full max-w-sm overflow-hidden rounded-full bg-stone-200"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={showRecommendation ? 100 : undefined}
+              aria-label="Analysis in progress"
+            >
+              <div
+                className="analyzing-progress-fill h-1.5 rounded-full bg-stone-500"
+                style={{
+                  animation: `analyzing-progress ${ANALYSIS_DURATION}ms linear forwards`,
+                }}
+              />
+            </div>
           </>
         ) : (
           <>

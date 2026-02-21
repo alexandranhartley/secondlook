@@ -228,7 +228,7 @@ function ResultsContent() {
       <main className="flex min-h-0 flex-1 flex-col pb-28">
         {/* White band: Smart Verdict only — carved out to stand out */}
         <div className="w-full shrink-0 bg-white">
-          <div className="mx-auto max-w-md px-5 pt-2 pb-4">
+          <div className="mx-auto max-w-md px-5 pt-8 pb-8">
             <RecommendationCard
               headline={item.recommendation.headline}
               subhead={item.recommendation.subhead}
