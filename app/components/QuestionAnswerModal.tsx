@@ -160,7 +160,7 @@ export default function QuestionAnswerModal({
                   >
                     Upload Photo
                   </button>
-                  {typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia && (
+                  {typeof navigator !== "undefined" && navigator.mediaDevices && (
                     <button
                       type="button"
                       onClick={handleCameraClick}
