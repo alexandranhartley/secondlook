@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -108,9 +109,31 @@ export default function DetailsScreen() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white text-stone-900">
-      <main className="flex-1 px-5 pb-10 pt-6">
+      {/* Top bar: back arrow + return to home */}
+      <header className="flex shrink-0 items-center px-5 pt-4">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-stone-600 hover:text-stone-900"
+          aria-label="Return to home"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          <span className="text-sm font-medium">Return to home</span>
+        </Link>
+      </header>
+      <main className="flex-1 px-5 pb-10 pt-8">
         <h1 className="font-title-serif text-2xl font-bold text-stone-900">
-          Tell us more
+          Tell Us More
         </h1>
         <p className="mt-2 text-sm text-stone-600">
           Add details to help our AI advisor give you the best guidance.
