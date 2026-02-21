@@ -9,10 +9,12 @@ export type RecommendationColor = "green" | "amber" | "red";
  */
 export function getRecommendationColor(headline: string): RecommendationColor {
   const lower = headline.toLowerCase();
-  if (lower.includes("purchase") || lower.includes("buy")) {
+  const greenPhrases = ["purchase", "buy", "good buy", "worth buying", "recommend"];
+  const redPhrases = ["pass", "skip", "avoid", "skip it", "steer clear"];
+  if (greenPhrases.some((p) => lower.includes(p))) {
     return "green";
   }
-  if (lower.includes("pass") || lower.includes("skip") || lower.includes("avoid")) {
+  if (redPhrases.some((p) => lower.includes(p))) {
     return "red";
   }
   // "Worth a closer look" or uncertain cases

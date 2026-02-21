@@ -138,6 +138,20 @@ body {
   }
 }
 
+/* Delightful reveal: headline rises slightly and sharpens into place */
+@keyframes recommendation-reveal-delight {
+  0% {
+    filter: blur(10px);
+    opacity: 0.3;
+    transform: translateY(14px) scale(0.96);
+  }
+  100% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .border-glow-layer {
   position: fixed;
   top: 0;
@@ -156,7 +170,7 @@ body {
 }
 
 .recommendation-reveal {
-  animation: unblur 1s ease-out;
+  animation: recommendation-reveal-delight 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .spark-trail {

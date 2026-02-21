@@ -29,7 +29,11 @@ export type AnalyzeItemResponse = {
   savingsReasoning?: string; // Only included if recommendation confidence is Low/Medium
 };
 
-const ANALYSIS_SYSTEM_PROMPT = `You are an expert secondhand furniture advisor. Analyze furniture photos, price, and notes to provide a comprehensive assessment. Generate reasoning for all insights, and if any insights have Low or Medium confidence, generate questions to help improve confidence. Return valid JSON only, no markdown or explanation.`;
+const ANALYSIS_SYSTEM_PROMPT = `You are an expert secondhand furniture advisor. Analyze furniture photos, price, and notes to provide a comprehensive assessment. Generate reasoning for all insights, and if any insights have Low or Medium confidence, generate questions to help improve confidence.
+
+Use the full range of recommendations; do not default to "Worth a closer look." Reserve "Worth a closer look" only for genuine uncertainty (e.g. need more info, mixed signals, borderline price). Use "Purchase this!" when value, condition, and materials support buying; use "Pass" when clearly overpriced, poor condition, or major red flags. Tie confidence to evidence strength: use High when the photos and notes clearly support your headline; use Medium or Low when something is unclear or would benefit from more info.
+
+Return valid JSON only, no markdown or explanation.`;
 
 export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -122,6 +126,11 @@ Return a JSON object with this exact structure:
   "savingsReasoning": "ONLY include this field if recommendation confidence is Low or Medium. Provide a 3-4 sentence explanation of how you calculated the savings estimate."
 }
 
+Recommendation rules (choose headline and confidence from the full range):
+- Purchase this! — When asking price is at or below fair value, condition is Good or better, materials are solid, and there are no major red flags. Use High confidence when evidence from photos and notes is clear.
+- Worth a closer look — Only when genuinely uncertain (e.g. cannot assess condition from photos, price is borderline, or a key factor like age or materials is unclear). Use Medium or Low confidence when more info would help.
+- Pass — When overpriced vs fair value, condition is poor, major restoration needed, or clear red flags. Use High confidence when the evidence clearly does not support buying.
+
 IMPORTANT REQUIREMENTS:
 1. Provide reasoning for ALL insights (required, not optional)
 2. recommendation.rationalePoints MUST be an array of exactly 3 concise sentences explaining why you gave this recommendation. Focus on: (1) value vs market, (2) condition/materials, (3) key risk or upside. One short sentence per point.
@@ -130,7 +139,7 @@ IMPORTANT REQUIREMENTS:
 5. Questions should prioritize helping multiple insights simultaneously
 6. Questions must reference details from the photos, price, or notes provided
 
-Base your assessment on what you can see in the photos, the asking price, and any notes provided.`;
+Base your assessment on what you can see in the photos, the asking price, and any notes provided. Your title, recommendation, insights, rationalePoints, and questions MUST be specific to these exact photos and this price—do not give generic or repeated answers. Describe what you actually see in the images (style, condition, materials, wear) and how the asking price compares to your fair value estimate.`;
 
   // Multimodal user message: text + image parts (Vision API)
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [

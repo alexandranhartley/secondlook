@@ -10,6 +10,7 @@ import {
   setStoredPhotos,
   setStoredPrice,
   setStoredNotes,
+  clearStoredAnalysis,
 } from "../lib/capture";
 
 export default function DetailsScreen() {
@@ -56,6 +57,8 @@ export default function DetailsScreen() {
     // Persist price and notes so the analyzing screen can call the API
     setStoredPrice(price);
     setStoredNotes(notes);
+    // Clear any previous analysis so we always run the API with this item's photos/price
+    clearStoredAnalysis();
 
     // Go to analyzing screen immediately; API runs there so waiting feels like progress
     router.push("/analyzing");

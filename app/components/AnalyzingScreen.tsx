@@ -26,9 +26,8 @@ const TEXT_SEQUENCE = [
 
 const PULSE_DURATION = 2000; // 2 seconds per cycle
 const ANALYSIS_DURATION = 8000; // 8 seconds total — feels more deliberate
-const REVEAL_DURATION = 2500; // 2.5 seconds to show recommendation
+const REVEAL_DURATION = 2000; // 2 seconds to show recommendation, then go to results
 const SPARK_DURATION = 1500; // 1.5 seconds for spark
-const COLOR_PHASE_DURATION = 4000; // Stay in warm yellow for 4s, then switch to final
 
 export default function AnalyzingScreen() {
   const router = useRouter();
@@ -39,19 +38,23 @@ export default function AnalyzingScreen() {
   const [colorPhase, setColorPhase] = useState<"yellow" | "final">("yellow");
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [recommendationHeadline, setRecommendationHeadline] = useState("");
-  const [glowIntensity, setGlowIntensity] = useState(0.65); // Softer pulse range 0.5–0.8
+  const [glowIntensity, setGlowIntensity] = useState(0.68); // Pulse range 0.45–0.9 for clearer breathing
   const timersRef = useRef<NodeJS.Timeout[]>([]);
   const borderGlowRef = useRef<HTMLDivElement>(null);
   const hasRevealTimeElapsedRef = useRef(false);
   const analysisReadyRef = useRef(false);
   const setRecommendationFromAnalysisRef = useRef<((headline: string, color: RecommendationColor) => void) | null>(null);
 
-  // Apply analysis result and reveal if the 8s has already elapsed
+  // Apply analysis result and reveal if the 8s has already elapsed. Only switch glow to final color when we know the verdict (so it never flashes green for "Worth a closer look").
   const applyAnalysisAndMaybeReveal = useCallback(
     (headline: string, color: RecommendationColor) => {
       setBorderColor(color);
       setRecommendationHeadline(headline);
+      setColorPhase("final");
       analysisReadyRef.current = true;
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
       if (hasRevealTimeElapsedRef.current) {
         setShowRecommendation(true);
       }
@@ -77,6 +80,7 @@ export default function AnalyzingScreen() {
       const color = getRecommendationColor(existing.recommendation.headline);
       setBorderColor(color);
       setRecommendationHeadline(existing.recommendation.headline);
+      setColorPhase("final");
       analysisReadyRef.current = true;
       return;
     }
@@ -128,37 +132,19 @@ export default function AnalyzingScreen() {
     return () => clearInterval(interval);
   }, [photos.length]);
 
-  // Text updates
+  // Text updates — "Preparing your verdict" only for ~1s; earlier steps get a bit more time
   useEffect(() => {
     if (photos.length === 0) return;
 
-    const textInterval = setInterval(() => {
-      setCurrentTextIndex((prev) => {
-        if (prev < TEXT_SEQUENCE.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, ANALYSIS_DURATION / TEXT_SEQUENCE.length);
-
-    timersRef.current.push(textInterval);
-    return () => clearInterval(textInterval);
-  }, [photos.length]);
-
-  // Color transition and haptic — stay in warm yellow longer, then switch to final
-  useEffect(() => {
-    if (photos.length === 0) return;
-
-    const colorTimer = setTimeout(() => {
-      setColorPhase("final");
-      // Haptic feedback on mobile
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate([100, 50, 100]);
-      }
-    }, COLOR_PHASE_DURATION);
-
-    timersRef.current.push(colorTimer);
-    return () => clearTimeout(colorTimer);
+    const t1 = setTimeout(() => setCurrentTextIndex(1), 2000);
+    const t2 = setTimeout(() => setCurrentTextIndex(2), 4500);
+    const t3 = setTimeout(() => setCurrentTextIndex(3), 7000); // verdict line ~1s before reveal at 8s
+    timersRef.current.push(t1, t2, t3);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, [photos.length]);
 
   // Recommendation reveal — after ANALYSIS_DURATION, show result when we have it
@@ -188,40 +174,40 @@ export default function AnalyzingScreen() {
     return () => clearTimeout(navTimer);
   }, [showRecommendation, router, photos.length]);
 
-  // Pulsing animation for glow intensity - smooth, gradual breathing effect
+  // Pulsing animation for glow intensity — clear, smooth breathing so user sees activity
   useEffect(() => {
     if (showRecommendation || photos.length === 0) return;
-    
+
     let startTime: number | null = null;
-    const duration = 2000; // 2 second cycle
-    
+    const duration = 2200; // 2.2s cycle so each pulse is easy to see
+
     const animate = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
       const elapsed = timestamp - startTime;
       const progress = (elapsed % duration) / duration;
-      
-      // Smooth sine wave — narrower range (0.5 to 0.8) for gentler breathing
-      const intensity = 0.5 + (0.3 * (Math.sin(progress * Math.PI * 2) + 1) / 2);
+
+      // Sine wave: range 0.45–0.9 so the pulse is clearly visible
+      const intensity = 0.45 + (0.45 * (Math.sin(progress * Math.PI * 2) + 1) / 2);
       setGlowIntensity(intensity);
-      
+
       requestAnimationFrame(animate);
     };
-    
+
     const animationId = requestAnimationFrame(animate);
-    
+
     return () => cancelAnimationFrame(animationId);
   }, [showRecommendation, photos.length]);
 
-  // Update border glow via ref — softer alphas and smaller spread
+  // Update border glow via ref — softer in final phase
   useEffect(() => {
     if (!borderGlowRef.current || photos.length === 0) return;
     const isYellow = colorPhase === "yellow";
     const colorValue = isYellow ? getYellowColor() : getColorValue(borderColor);
-    const baseAlpha = isYellow ? 0.6 : 0.5; // Softer glow, no 1.2
+    const baseAlpha = isYellow ? 0.6 : 0.32;
     const pulseMultiplier = glowIntensity;
-    const innerAlpha = Math.min(0.65, baseAlpha * pulseMultiplier * 0.9);
-    const middleAlpha = Math.min(0.5, baseAlpha * pulseMultiplier * 0.7);
-    const outerAlpha = Math.min(0.35, baseAlpha * pulseMultiplier * 0.4);
+    const innerAlpha = Math.min(isYellow ? 0.65 : 0.45, baseAlpha * pulseMultiplier * 0.9);
+    const middleAlpha = Math.min(isYellow ? 0.5 : 0.35, baseAlpha * pulseMultiplier * 0.7);
+    const outerAlpha = Math.min(isYellow ? 0.35 : 0.22, baseAlpha * pulseMultiplier * 0.4);
 
     borderGlowRef.current.style.boxShadow = `
       inset 0 0 60px 25px rgba(${colorValue.rgb}, ${innerAlpha}),
@@ -277,12 +263,12 @@ export default function AnalyzingScreen() {
   const colorValue = isYellow ? getYellowColor() : getColorValue(borderColor);
   const finalColorValue = getColorValue(borderColor);
 
-  // Softer glow in render — lower alpha, smaller spread
-  const baseAlpha = isYellow ? 0.6 : 0.5;
+  // Softer glow in render; lessen intensity in final phase so the border isn’t overwhelming
+  const baseAlpha = isYellow ? 0.6 : 0.32;
   const pulseMultiplier = glowIntensity;
-  const innerAlpha = Math.min(0.65, baseAlpha * pulseMultiplier * 0.9);
-  const middleAlpha = Math.min(0.5, baseAlpha * pulseMultiplier * 0.7);
-  const outerAlpha = Math.min(0.35, baseAlpha * pulseMultiplier * 0.4);
+  const innerAlpha = Math.min(isYellow ? 0.65 : 0.45, baseAlpha * pulseMultiplier * 0.9);
+  const middleAlpha = Math.min(isYellow ? 0.5 : 0.35, baseAlpha * pulseMultiplier * 0.7);
+  const outerAlpha = Math.min(isYellow ? 0.35 : 0.22, baseAlpha * pulseMultiplier * 0.4);
 
   const currentGlowShadow = `
     inset 0 0 60px 25px rgba(${colorValue.rgb}, ${innerAlpha}),
