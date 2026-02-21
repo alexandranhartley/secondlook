@@ -206,7 +206,7 @@ export default function AnalyzingScreen() {
 
   if (photos.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="text-center">
           <p className="text-stone-600">No photos yet.</p>
           <p className="mt-2 text-sm text-stone-500">Add photos to get your analysis. Taking you back…</p>
@@ -240,7 +240,7 @@ export default function AnalyzingScreen() {
   `;
 
   return (
-    <div className="analyzing-container fixed inset-0 bg-background">
+    <div className="analyzing-container fixed inset-0 bg-white">
       {/* Pulsating border glow - using edge divs for guaranteed visibility */}
       <div
         ref={borderGlowRef}

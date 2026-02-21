@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { resizeDataUrlForAnalysisServer } from "@/app/lib/resizeForAnalysisServer";
 
 export type AnalyzeItemResponse = {
   recommendation: {
@@ -7,6 +8,8 @@ export type AnalyzeItemResponse = {
     subhead: string;
     confidence: "High" | "Medium" | "Low";
     chips: string[];
+    /** Exactly 3 concise reasons for the recommendation (value, condition/materials, risk or upside). */
+    rationalePoints: string[];
   };
   insights: Array<{
     label: string;
@@ -63,7 +66,11 @@ export async function POST(request: Request) {
   const openai = new OpenAI({ apiKey });
 
   // Cap images sent to the model (cost control)
-  const photosToSend = photos.slice(0, 3);
+  const photosCapped = photos.slice(0, 3);
+  // Server-side resize so we never send huge images even if client sent them (saves tokens)
+  const photosToSend = await Promise.all(
+    photosCapped.map((url) => resizeDataUrlForAnalysisServer(url))
+  );
 
   // Build prompt with comprehensive analysis request
   const userPrompt = `Below are ${photosToSend.length} photo(s) of the item. Analyze them along with the price and notes below.
@@ -80,7 +87,8 @@ Return a JSON object with this exact structure:
     "headline": "Main recommendation (e.g., 'Purchase this!' or 'Worth a closer look' or 'Pass')",
     "subhead": "One sentence explanation",
     "confidence": "High" | "Medium" | "Low",
-    "chips": ["Save $X-Y", "Condition note", "Restoration note"]
+    "chips": ["Save $X-Y", "Condition note", "Restoration note"],
+    "rationalePoints": ["First reason in one short sentence", "Second reason", "Third reason"]
   },
   "insights": [
     {
@@ -116,10 +124,11 @@ Return a JSON object with this exact structure:
 
 IMPORTANT REQUIREMENTS:
 1. Provide reasoning for ALL insights (required, not optional)
-2. If ANY insight has Low or Medium confidence, include a "questions" array with exactly 2 questions
-3. If recommendation confidence is Low or Medium, include "savingsReasoning"
-4. Questions should prioritize helping multiple insights simultaneously
-5. Questions must reference details from the photos, price, or notes provided
+2. recommendation.rationalePoints MUST be an array of exactly 3 concise sentences explaining why you gave this recommendation. Focus on: (1) value vs market, (2) condition/materials, (3) key risk or upside. One short sentence per point.
+3. If ANY insight has Low or Medium confidence, include a "questions" array with exactly 2 questions
+4. If recommendation confidence is Low or Medium, include "savingsReasoning"
+5. Questions should prioritize helping multiple insights simultaneously
+6. Questions must reference details from the photos, price, or notes provided
 
 Base your assessment on what you can see in the photos, the asking price, and any notes provided.`;
 
@@ -174,8 +183,26 @@ Base your assessment on what you can see in the photos, the asking price, and an
           .slice(0, 2) // Limit to 2 questions
       : undefined;
 
+    // Ensure recommendation.rationalePoints is exactly 3 items (required for SMART VERDICT UI)
+    const rawPoints = parsed.recommendation?.rationalePoints;
+    const fallbackPoints = parsed.recommendation?.chips?.slice(0, 3) || [
+      "Based on condition, materials, and price.",
+      "Assessment from photos and asking price.",
+      "See more details below for full reasoning.",
+    ];
+    const rationalePoints =
+      Array.isArray(rawPoints) && rawPoints.length >= 3
+        ? rawPoints.slice(0, 3)
+        : fallbackPoints.length >= 3
+          ? fallbackPoints
+          : [...fallbackPoints, ...fallbackPoints].slice(0, 3);
+
     const response: AnalyzeItemResponse = {
       ...parsed,
+      recommendation: {
+        ...parsed.recommendation,
+        rationalePoints,
+      },
       insights: validatedInsights,
       questions: validatedQuestions,
     };

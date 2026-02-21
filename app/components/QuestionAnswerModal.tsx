@@ -18,7 +18,7 @@ type QuestionAnswerModalProps = {
 
 export default function QuestionAnswerModal({
   question,
-  insightLabel,
+  insightLabel: _insightLabel,
   onSave,
   onClose,
 }: QuestionAnswerModalProps) {
@@ -39,7 +39,6 @@ export default function QuestionAnswerModal({
 
   const handleCameraClick = useCallback(async () => {
     if (isCapturing) {
-      // Stop camera
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -47,7 +46,6 @@ export default function QuestionAnswerModal({
       setIsCapturing(false);
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
@@ -81,18 +79,17 @@ export default function QuestionAnswerModal({
 
   const handleSave = useCallback(() => {
     if (question.answerType === "photo" && !answerPhoto) {
-      alert("Please provide a photo answer");
+      alert("Please provide a photo");
       return;
     }
     if (question.answerType === "text" && !answerText.trim()) {
-      alert("Please provide a text answer");
+      alert("Please provide an answer");
       return;
     }
     if (question.answerType === "either" && !answerPhoto && !answerText.trim()) {
-      alert("Please provide either a photo or text answer");
+      alert("Please describe or upload a photo");
       return;
     }
-
     onSave({
       photo: answerPhoto || undefined,
       text: answerText.trim() || undefined,
@@ -102,10 +99,15 @@ export default function QuestionAnswerModal({
 
   const needsPhoto = question.answerType === "photo" || question.answerType === "either";
   const needsText = question.answerType === "text" || question.answerType === "either";
+  const hasBoth = needsText && needsPhoto;
+
+  const textPlaceholder = hasBoth
+    ? "Describe the stains or upload a photo..."
+    : "Enter your answer...";
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="question-modal-title"
@@ -113,115 +115,136 @@ export default function QuestionAnswerModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h3 id="question-modal-title" className="text-lg font-semibold text-stone-900 mb-2">
-          {question.text}
-        </h3>
-        <p className="text-sm text-stone-500 mb-4">
-          {insightLabel} • {question.answerType === "photo" ? "Photo answer" : question.answerType === "text" ? "Text answer" : "Photo or text answer"}
-        </p>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+        {/* Question at top: bold black, upward caret on right (collapsible hint) */}
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 id="question-modal-title" className="flex-1 text-base font-bold leading-snug text-stone-900">
+            {question.text}
+          </h3>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5 shrink-0 text-stone-400"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M18 15l-6-6-6 6" />
+          </svg>
+        </div>
 
-        {needsPhoto && (
+        {/* Text input when text required — light gray bg, rounded, placeholder */}
+        {needsText && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-stone-700 mb-2">
-              Photo Answer
-            </label>
+            <textarea
+              id="text-answer"
+              value={answerText}
+              onChange={(e) => setAnswerText(e.target.value)}
+              placeholder={textPlaceholder}
+              rows={4}
+              className="w-full rounded-xl bg-stone-100 px-4 py-3 text-stone-900 placeholder:text-stone-400 focus:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-400"
+            />
+          </div>
+        )}
+
+        {/* Upload / take photo when photo required — light gray button, camera icon + label */}
+        {needsPhoto && (
+          <div className="mb-5 space-y-2">
             {answerPhoto ? (
-              <div className="relative">
+              <div className="relative rounded-xl overflow-hidden bg-stone-100">
                 <img
                   src={answerPhoto}
-                  alt="Answer photo"
-                  className="w-full rounded-lg border border-stone-200"
+                  alt="Your photo"
+                  className="w-full rounded-xl border border-stone-200"
                 />
                 <button
                   type="button"
                   onClick={() => setAnswerPhoto(null)}
-                  className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                  className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/70"
+                  aria-label="Remove photo"
                 >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="sr-only"
+            ) : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="sr-only"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-100 py-3 text-base font-medium text-stone-900 hover:bg-stone-200"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5 text-stone-600"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              Upload Photo
+            </button>
+            {typeof navigator !== "undefined" && navigator.mediaDevices && (
+              <button
+                type="button"
+                onClick={handleCameraClick}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-100 py-3 text-base font-medium text-stone-900 hover:bg-stone-200"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5 text-stone-600" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                {isCapturing ? "Stop camera" : "Take photo"}
+              </button>
+            )}
+            {isCapturing && (
+              <div className="relative rounded-xl overflow-hidden bg-stone-100">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full rounded-xl"
                 />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 rounded-lg border border-stone-300 bg-white py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-                  >
-                    Upload Photo
-                  </button>
-                  {typeof navigator !== "undefined" && navigator.mediaDevices && (
-                    <button
-                      type="button"
-                      onClick={handleCameraClick}
-                      className="flex-1 rounded-lg border border-stone-300 bg-white py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-                    >
-                      {isCapturing ? "Stop Camera" : "Use Camera"}
-                    </button>
-                  )}
-                </div>
-                {isCapturing && videoRef && (
-                  <div className="relative">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full rounded-lg border border-stone-200"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCapturePhoto}
-                      className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white px-6 py-2 text-sm font-semibold text-stone-900 shadow-lg"
-                    >
-                      Capture Photo
-                    </button>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={handleCapturePhoto}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-stone-900 shadow-lg"
+                >
+                  Capture photo
+                </button>
               </div>
             )}
           </div>
         )}
 
-        {needsText && (
-          <div className="mb-4">
-            <label htmlFor="text-answer" className="block text-sm font-medium text-stone-700 mb-2">
-              Text Answer
-            </label>
-            <textarea
-              id="text-answer"
-              value={answerText}
-              onChange={(e) => setAnswerText(e.target.value)}
-              placeholder="Enter your answer..."
-              rows={3}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-900 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-        )}
-
-        <div className="flex gap-2">
+        {/* Submit to save and recalculate recommendation */}
+        <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg border border-stone-300 bg-white py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            className="flex-1 rounded-xl bg-stone-100 py-3 text-sm font-medium text-stone-700 hover:bg-stone-200"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="flex-1 rounded-xl bg-stone-800 py-3 text-sm font-semibold text-white hover:bg-stone-900"
           >
-            Save Answer
+            Submit
           </button>
         </div>
       </div>

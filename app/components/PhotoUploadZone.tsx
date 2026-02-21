@@ -73,13 +73,13 @@ const PhotoUploadZone = forwardRef<PhotoUploadZoneRef, PhotoUploadZoneProps>(
         <button
           type="button"
           onClick={handleZoneClick}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50/80 py-10 px-4 transition-colors hover:border-stone-400 hover:bg-stone-100/80 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          className="flex w-full flex-col items-center justify-center gap-1.5 rounded-[18px] border-2 border-dashed border-stone-300 bg-stone-50/80 py-6 px-4 transition-colors hover:border-stone-400 hover:bg-stone-100/80 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2"
         >
           {previews.length === 0 ? (
             <>
               <svg
                 viewBox="0 0 24 24"
-                className="h-12 w-12 text-stone-400"
+                className="h-9 w-9 text-stone-400"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
@@ -90,14 +90,11 @@ const PhotoUploadZone = forwardRef<PhotoUploadZoneRef, PhotoUploadZoneProps>(
                 <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                 <circle cx="12" cy="13" r="4" />
               </svg>
-              <span className="text-sm font-medium text-stone-600">
-                Tap to upload photos
-              </span>
-              <span className="text-xs text-stone-500">
-                Or take new ones with your camera
+              <span className="text-sm font-semibold text-stone-600">
+                Start your scan
               </span>
               <span className="text-xs text-stone-400">
-                Up to {MAX_PHOTOS} photos
+                Up to {MAX_PHOTOS} photos · upload or take with camera
               </span>
             </>
           ) : (
@@ -115,7 +112,7 @@ const PhotoUploadZone = forwardRef<PhotoUploadZoneRef, PhotoUploadZoneProps>(
                       e.stopPropagation();
                       removeAt(i);
                     }}
-                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-stone-700 text-white shadow hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-stone-700 text-white shadow hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-500"
                     aria-label={`Remove photo ${i + 1}`}
                   >
                     <svg

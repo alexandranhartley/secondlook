@@ -100,26 +100,24 @@ export default function DetailsScreen() {
     }
   }, [router, photos, price, notes]);
 
-  const canAnalyze = photos.length >= 1;
+  const hasValidPrice =
+    price.trim() !== "" &&
+    !Number.isNaN(parseFloat(price)) &&
+    parseFloat(price) >= 0;
+  const canAnalyze = photos.length >= 1 && hasValidPrice;
 
   return (
-    <div className="mx-auto min-h-screen max-w-md bg-background text-stone-900">
-      <header className="px-5 pt-6 pb-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">
-          SecondLook
-        </p>
-      </header>
-
-      <main className="px-5 pb-10">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white text-stone-900">
+      <main className="flex-1 px-5 pb-10 pt-6">
+        <h1 className="font-title-serif text-2xl font-bold text-stone-900">
           Tell us more
         </h1>
         <p className="mt-2 text-sm text-stone-600">
           Add details to help our AI advisor give you the best guidance.
         </p>
 
-        <section className="mt-6" aria-labelledby="photos-heading">
-          <h2 id="photos-heading" className="sr-only">
+        <section className="mt-8" aria-labelledby="photos-heading">
+          <h2 id="photos-heading" className="text-xs font-medium uppercase tracking-[0.12em] text-stone-500">
             Your photos
           </h2>
           <input
@@ -131,7 +129,7 @@ export default function DetailsScreen() {
             className="sr-only"
             aria-label="Add more photos"
           />
-          <div className="flex gap-3">
+          <div className="mt-2 flex gap-3">
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
@@ -188,34 +186,42 @@ export default function DetailsScreen() {
           </p>
         </section>
 
-        <section className="mt-6">
+        <section className="mt-8">
           <label
             htmlFor="asking-price"
-            className="block text-sm font-medium text-stone-700"
+            className="block text-xs font-medium uppercase tracking-[0.12em] text-stone-500"
           >
-            Asking Price
+            Asking price <span className="text-stone-500">(required)</span>
           </label>
-          <div className="mt-1.5 flex rounded-xl border border-stone-300 bg-white">
+          <div className="mt-1.5 flex rounded-xl border border-stone-300 bg-white focus-within:outline focus-within:outline-2 focus-within:outline-black focus-within:outline-offset-0">
             <span className="flex items-center pl-4 text-stone-500">$</span>
             <input
               id="asking-price"
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               placeholder="0.00"
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="w-full rounded-r-xl border-0 py-3 pr-4 pl-1 text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-emerald-500"
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Allow empty, digits, and one decimal with up to 2 decimal places
+                if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
+                  setPrice(raw);
+                }
+              }}
+              required
+              aria-required="true"
+              className="w-full rounded-r-xl border-0 py-3 pr-4 pl-1 text-stone-900 placeholder:text-stone-400 focus:outline-none"
             />
           </div>
         </section>
 
-        <section className="mt-6">
+        <section className="mt-8">
           <label
             htmlFor="additional-notes"
-            className="block text-sm font-medium text-stone-700"
+            className="block text-xs font-medium uppercase tracking-[0.12em] text-stone-500"
           >
-            Additional Notes (Optional)
+            Additional notes (optional)
           </label>
           <textarea
             id="additional-notes"
@@ -223,7 +229,7 @@ export default function DetailsScreen() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-stone-900 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none focus:ring-2 focus:ring-stone-500"
           />
           <p className="mt-1 text-xs text-stone-500">
             Include any info about the maker, materials, measurements, or wear.
@@ -235,7 +241,7 @@ export default function DetailsScreen() {
             type="button"
             onClick={handleAnalyze}
             disabled={!canAnalyze || isAnalyzing}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-500 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-stone-800 py-3 text-sm font-semibold text-white shadow-sm hover:bg-stone-900 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500"
           >
             {isAnalyzing ? (
               <>
@@ -262,7 +268,9 @@ export default function DetailsScreen() {
           </button>
           {!canAnalyze && (
             <p className="mt-2 text-center text-xs text-stone-500">
-              Add at least one photo to analyze.
+              {photos.length < 1
+                ? "Add at least one photo to analyze."
+                : "Enter an asking price to analyze."}
             </p>
           )}
         </div>

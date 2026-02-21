@@ -6,8 +6,9 @@
 
 import { blobToDataUrl } from "./capture";
 
-const DEFAULT_MAX_LONG_EDGE = 1024;
-const DEFAULT_QUALITY = 0.8;
+// Smaller defaults to keep OpenAI image token cost low (was 1024 / 0.8)
+const DEFAULT_MAX_LONG_EDGE = 768;
+const DEFAULT_QUALITY = 0.75;
 
 export async function resizeDataUrlForAnalysis(
   dataUrl: string,

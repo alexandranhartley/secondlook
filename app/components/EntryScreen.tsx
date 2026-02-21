@@ -1,15 +1,38 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fileToDataUrl, setStoredPhotos, clearStoredInsightAnswers } from "../lib/capture";
+import {
+  blobToDataUrl,
+  fileToDataUrl,
+  setStoredPhotos,
+  setStoredPrice,
+  setStoredNotes,
+  setStoredAnalysis,
+  clearStoredInsightAnswers,
+} from "../lib/capture";
+import { resizeDataUrlForAnalysis } from "../lib/resizeForAnalysis";
 import PhotoUploadZone, { type PhotoUploadZoneRef } from "./PhotoUploadZone";
 
 const EXAMPLES = [
-  { id: "dresser", label: "Dresser", slug: "Late Victorian dresser" },
-  { id: "chair", label: "Chair", slug: "Mid-century chair" },
-  { id: "nightstand", label: "Nightstand", slug: "Wood nightstand" },
+  {
+    id: "dresser",
+    image: "/images/example-furniture.png",
+    price: "450",
+    notes: "Late Victorian dresser, solid wood, seven drawers, original hardware.",
+  },
+  {
+    id: "chair",
+    image: "/images/example-chair.png",
+    price: "325",
+    notes: "Mid-century Wishbone-style chair, wood frame with paper cord seat.",
+  },
+  {
+    id: "nightstand",
+    image: "/images/example-nightstand.png",
+    price: "175",
+    notes: "Antique-style nightstand, dark wood with carved details and light top.",
+  },
 ] as const;
 
 function useIsMobile() {
@@ -29,8 +52,50 @@ export default function EntryScreen() {
   const router = useRouter();
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [exampleLoadingId, setExampleLoadingId] = useState<string | null>(null);
   const photoUploadRef = useRef<PhotoUploadZoneRef>(null);
   const isMobile = useIsMobile();
+
+  const handleExampleClick = useCallback(
+    async (exampleId: string) => {
+      const example = EXAMPLES.find((e) => e.id === exampleId);
+      if (!example) return;
+      setExampleLoadingId(exampleId);
+      clearStoredInsightAnswers();
+      try {
+        const res = await fetch(example.image);
+        if (!res.ok) throw new Error("Failed to load example image");
+        const blob = await res.blob();
+        const dataUrl = await blobToDataUrl(blob);
+        setStoredPhotos([dataUrl]);
+        setStoredPrice(example.price);
+        setStoredNotes(example.notes);
+        const photosToSend = await Promise.all([resizeDataUrlForAnalysis(dataUrl)]);
+        const apiRes = await fetch("/api/analyze-item", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            photos: photosToSend,
+            price: example.price,
+            notes: example.notes,
+          }),
+        });
+        if (!apiRes.ok) {
+          const err = await apiRes.json().catch(() => ({ error: "Analysis failed" }));
+          throw new Error(err.error || "Analysis failed");
+        }
+        const analysis = await apiRes.json();
+        setStoredAnalysis(analysis);
+        router.push("/analyzing");
+      } catch (err) {
+        console.error("Example analysis error:", err);
+        setUploadError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      } finally {
+        setExampleLoadingId(null);
+      }
+    },
+    [router]
+  );
 
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
@@ -67,15 +132,15 @@ export default function EntryScreen() {
   }, [router]);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-background text-stone-900">
-      <header className="px-5 pt-6 pb-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white text-stone-900">
+      <header className="px-5 pt-6 pb-4">
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-stone-500">
           SecondLook
         </p>
       </header>
 
-      <main className="flex-1 px-5 pb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl">
+      <main className="flex-1 px-5 pb-10">
+        <h1 className="font-title-serif text-2xl font-bold text-stone-900 sm:text-3xl">
           Analyze your find
         </h1>
         <p className="mt-2 text-sm text-stone-600">
@@ -83,7 +148,7 @@ export default function EntryScreen() {
           your secondhand piece.
         </p>
 
-        <section className="mt-6" aria-labelledby="upload-heading">
+        <section className="mt-10" aria-labelledby="upload-heading">
           <h2 id="upload-heading" className="sr-only">
             Upload photos of your wooden furniture
           </h2>
@@ -99,37 +164,43 @@ export default function EntryScreen() {
           />
         </section>
 
-        <p className="mt-6 text-center text-xs text-stone-500">
+        <p className="mt-8 text-center text-xs text-stone-500">
           No photos yet? Try an example below to see how it works.
         </p>
 
-        <section className="mt-10" aria-labelledby="examples-heading">
-          <h2 id="examples-heading" className="text-sm font-semibold text-stone-700">
-            Try an example:
-          </h2>
-          <p className="mt-1 text-xs text-stone-500">
-            Wooden furniture examples to explore the app
-          </p>
-          <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
-            {EXAMPLES.map(({ id, label, slug }) => (
-              <Link
-                key={id}
-                href={`/results?example=${id}`}
-                className="flex min-w-[120px] flex-shrink-0 flex-col rounded-2xl bg-white shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-              >
-                <div
-                  className="aspect-square w-full rounded-t-2xl bg-gradient-to-br from-amber-100 via-stone-200 to-amber-50"
-                  aria-hidden
-                />
-                <div className="px-3 py-3">
-                  <span className="text-sm font-medium text-stone-900">
-                    {label}
-                  </span>
-                  <p className="text-xs text-stone-500">{slug}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+        <section className="mt-5 grid grid-cols-3 gap-3" aria-label="Example furniture to try">
+            {EXAMPLES.map(({ id, image }) => {
+              const isLoading = exampleLoadingId === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleExampleClick(id)}
+                  disabled={exampleLoadingId !== null}
+                  className="flex flex-col overflow-hidden rounded-[18px] bg-white focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-wait"
+                  aria-label={`Try example: ${id}`}
+                >
+                  <div className="relative aspect-square w-full overflow-hidden bg-white">
+                    <img
+                      src={image}
+                      alt=""
+                      className="h-full w-full object-contain object-center"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                    {isLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/80" aria-hidden>
+                        <svg className="h-6 w-6 animate-spin text-stone-500" fill="none" viewBox="0 0 24 24" aria-hidden>
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
         </section>
       </main>
 
@@ -140,7 +211,7 @@ export default function EntryScreen() {
           aria-modal="true"
           aria-labelledby="source-modal-title"
         >
-          <div className="w-full max-w-md rounded-t-2xl bg-background p-4 pb-safe">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-4 pb-safe">
             <h3 id="source-modal-title" className="text-center text-sm font-semibold text-stone-700">
               Add photos
             </h3>
@@ -148,7 +219,7 @@ export default function EntryScreen() {
               <button
                 type="button"
                 onClick={handleTakeCamera}
-                className="rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+                className="rounded-xl bg-stone-800 py-3 text-sm font-semibold text-white hover:bg-stone-900"
               >
                 Take with camera
               </button>

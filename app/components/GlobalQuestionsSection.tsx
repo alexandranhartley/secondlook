@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import QuestionAnswerModal, { type Question } from "./QuestionAnswerModal";
+import QuestionAnswerForm, { type Question } from "./QuestionAnswerForm";
 import {
   getStoredInsightAnswers,
   setStoredInsightAnswers,
@@ -31,7 +31,8 @@ export default function GlobalQuestionsSection({
   onConfidenceUpdates,
 }: GlobalQuestionsSectionProps) {
   const [answeredQuestions, setAnsweredQuestions] = useState<QuestionAnswer[]>([]);
-  const [selectedQuestion, setSelectedQuestion] = useState<(Question & { helpsInsights: string[] }) | null>(null);
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
+  const [recentlySubmittedId, setRecentlySubmittedId] = useState<string | null>(null);
   const [dissolvingQuestions, setDissolvingQuestions] = useState<Set<string>>(new Set());
   const [dissolvedQuestions, setDissolvedQuestions] = useState<Set<string>>(new Set());
 
@@ -71,30 +72,29 @@ export default function GlobalQuestionsSection({
       const allAnswers = getAllAnsweredQuestions();
       setAnsweredQuestions(allAnswers);
 
-      // Close the modal after saving
-      setSelectedQuestion(null);
+      // Show thank-you feedback, then collapse and dissolve
+      setRecentlySubmittedId(questionId);
 
-      // Automatically recalculate confidence after saving answer
-      if (insightsForRecalc.length > 0) {
-        // Use the updated answers that include the newly saved answer
+      // Recalculate recommendation (confidence updates) right away
+      if (insightsForRecalc.length > 0 && onConfidenceUpdates) {
         const updates = recalculateAllInsights(insightsForRecalc, allAnswers);
-        if (onConfidenceUpdates && Object.keys(updates).length > 0) {
-          onConfidenceUpdates(updates);
-          
-          // Start dissolve animation for this question
-          setDissolvingQuestions((prev) => new Set(prev).add(questionId));
-          
-          // Remove question after animation completes (600ms for fade-out)
-          setTimeout(() => {
-            setDissolvedQuestions((prev) => new Set(prev).add(questionId));
-            setDissolvingQuestions((prev) => {
-              const next = new Set(prev);
-              next.delete(questionId);
-              return next;
-            });
-          }, 600);
-        }
+        onConfidenceUpdates(updates);
       }
+
+      // After showing "Thank you" for 1.5s, collapse card and dissolve it
+      setTimeout(() => {
+        setExpandedQuestionId(null);
+        setRecentlySubmittedId(null);
+        setDissolvingQuestions((prev) => new Set(prev).add(questionId));
+        setTimeout(() => {
+          setDissolvedQuestions((prev) => new Set(prev).add(questionId));
+          setDissolvingQuestions((prev) => {
+            const next = new Set(prev);
+            next.delete(questionId);
+            return next;
+          });
+        }, 600);
+      }, 1500);
     },
     [insightsForRecalc, onConfidenceUpdates]
   );
@@ -109,69 +109,114 @@ export default function GlobalQuestionsSection({
     return null;
   }
 
+  // Hide the whole section once all questions have been answered and dissolved
+  const visibleQuestions = questionsFromProps.filter((q) => !dissolvedQuestions.has(q.id));
+  if (visibleQuestions.length === 0) {
+    return null;
+  }
+
   return (
     <>
-      <div className="rounded-2xl bg-white shadow-sm">
-        <div className="px-5 py-4">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-stone-500">
-            Questions to strengthen confidence
-          </h3>
-          <div className="space-y-3">
-            {questionsFromProps
-              .filter((q) => !dissolvedQuestions.has(q.id))
-              .map((q) => (
+      {/* Before you buy: questions to verify (works for online listings or in person) */}
+      <section className="py-1">
+        {/* BEFORE YOU BUY — small uppercase light grey sub-heading */}
+        <h3 className="text-xs font-medium uppercase tracking-[0.12em] text-stone-500">
+          Before you buy
+        </h3>
+        {/* Main title — same size as More Details (text-xl) */}
+        <p className="mt-2 font-title-serif text-xl font-bold text-stone-900">
+          What to Look For
+        </p>
+        {/* Instructional subtitle — smaller, regular weight, grey */}
+        <p className="mt-1 text-sm font-normal text-stone-500">
+          Tap a question to answer and improve your recommendation.
+        </p>
+        {/* Question cards — expand inline to show answer form (no modal) */}
+        <div className="mt-5 space-y-3">
+          {visibleQuestions.map((q) => {
+              const isExpanded = expandedQuestionId === q.id;
+              const questionWithType = { ...q, answerType: q.answerType as Question["answerType"] };
+              return (
                 <div
                   key={q.id}
-                  className={`space-y-2 transition-opacity ease-out ${
+                  className={`rounded-2xl transition-opacity ease-out ${
                     dissolvingQuestions.has(q.id) ? "opacity-0" : "opacity-100"
+                  } ${
+                    isExpanded
+                      ? "bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+                      : isAnswered(q.id)
+                        ? "bg-emerald-50"
+                        : "bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
                   }`}
                   style={{ transitionDuration: "400ms" }}
                 >
                   <button
                     type="button"
-                    onClick={() => setSelectedQuestion(q)}
-                    className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
-                      isAnswered(q.id)
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                        : "border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100"
-                    }`}
+                    onClick={() => setExpandedQuestionId(isExpanded ? null : q.id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${
+                      isAnswered(q.id) && !isExpanded
+                        ? "text-emerald-900"
+                        : "text-stone-900"
+                    } ${isExpanded ? "rounded-b-none" : ""}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="flex-1 font-medium">{q.text}</span>
-                      {isAnswered(q.id) && (
-                        <span className="flex-shrink-0 text-emerald-600">✓</span>
+                    <span className="flex-1 text-base font-medium">{q.text}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {isAnswered(q.id) && !isExpanded && (
+                        <span className="text-emerald-600" aria-hidden>✓</span>
+                      )}
+                      <svg
+                        viewBox="0 0 24 24"
+                        className={`h-4 w-4 text-stone-600 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </span>
+                  </button>
+                  {q.helpsInsights && q.helpsInsights.length > 0 && !isExpanded && (
+                    <div className="flex flex-wrap gap-1.5 px-4 pb-3 pt-0">
+                      {q.helpsInsights.map((insightLabel) => (
+                        <span
+                          key={insightLabel}
+                          className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500"
+                        >
+                          {insightLabel}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {isExpanded && (
+                    <div className="px-4 pb-4">
+                      {recentlySubmittedId === q.id ? (
+                        <div className="border-t border-stone-200 pt-4 mt-3 text-center py-6">
+                          <p className="text-base font-medium text-stone-900">
+                            Thank you for your response.
+                          </p>
+                          <p className="mt-1 text-sm text-stone-500">
+                            Recalculating your recommendation…
+                          </p>
+                        </div>
+                      ) : (
+                        <QuestionAnswerForm
+                          question={questionWithType}
+                          onSave={(answer) => {
+                            handleAnswerQuestion(q.id, answer, q.helpsInsights);
+                          }}
+                          onCancel={() => setExpandedQuestionId(null)}
+                        />
                       )}
                     </div>
-                    {q.helpsInsights && q.helpsInsights.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {q.helpsInsights.map((insightLabel) => (
-                          <span
-                            key={insightLabel}
-                            className="rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-stone-600"
-                          >
-                            {insightLabel}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </button>
+                  )}
                 </div>
-              ))}
-          </div>
+              );
+            })}
         </div>
-      </div>
-
-      {/* Question answer modal */}
-      {selectedQuestion && (
-        <QuestionAnswerModal
-          question={selectedQuestion}
-          insightLabel={selectedQuestion.helpsInsights.join(", ")}
-          onSave={(answer) =>
-            handleAnswerQuestion(selectedQuestion.id, answer, selectedQuestion.helpsInsights)
-          }
-          onClose={() => setSelectedQuestion(null)}
-        />
-      )}
+      </section>
     </>
   );
 }

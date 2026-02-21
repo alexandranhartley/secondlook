@@ -145,7 +145,7 @@ export default function CaptureScreen() {
         <button
           type="button"
           onClick={() => router.push("/")}
-          className="mt-6 rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-600"
+          className="mt-6 rounded-full bg-stone-800 px-6 py-3 text-sm font-semibold text-white hover:bg-stone-900"
         >
           Back to start
         </button>
@@ -191,7 +191,7 @@ export default function CaptureScreen() {
         <button
           type="button"
           onClick={handleDone}
-          className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+          className="rounded-full bg-stone-800 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-900"
         >
           Done
         </button>
@@ -240,7 +240,7 @@ export default function CaptureScreen() {
           type="button"
           onClick={capture}
           disabled={photos.length >= MAX_PHOTOS}
-          className="mb-2 flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border-4 border-white bg-emerald-500 text-white shadow-lg disabled:opacity-50"
+          className="mb-2 flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border-4 border-white bg-stone-800 text-white shadow-lg disabled:opacity-50 hover:bg-stone-900"
           aria-label="Take photo"
         >
           <svg
